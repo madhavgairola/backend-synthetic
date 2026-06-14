@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { LandingPage } from './components/LandingPage';
 import { SimulationView } from './components/SimulationView';
 import { ReportDashboard } from './components/ReportDashboard';
+import { ClarificationView } from './components/ClarificationView';
 import { Moon, Sun } from 'lucide-react';
 import { 
   analyzeIdea, generateAudience, simulate, generateReport, 
   type IdeaAnalysis, type Persona, type Simulation, type Report 
 } from './services/api';
 
-type AppState = 'landing' | 'simulation' | 'report';
+type AppState = 'landing' | 'clarification' | 'simulation' | 'report';
 type SimStatus = 'analyzing' | 'generating' | 'simulating' | 'done';
 
 function App() {
@@ -19,6 +20,9 @@ function App() {
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [simulations, setSimulations] = useState<Simulation[]>([]);
   const [report, setReport] = useState<Report | null>(null);
+
+  const [originalIdea, setOriginalIdea] = useState('');
+  const [clarificationQuestions, setClarificationQuestions] = useState<string[]>([]);
 
   // Dark mode state
   const [isDark, setIsDark] = useState(false);
@@ -40,14 +44,25 @@ function App() {
     setIsDark(!isDark);
   };
 
-  const startSimulationProcess = async (idea: string) => {
+  const startSimulationProcess = async (idea: string, skipClarification: boolean = false) => {
     try {
+      if (!skipClarification) {
+        setOriginalIdea(idea);
+      }
       setAppState('simulation');
       
       // Step 1: Analyze Idea
       setSimStatus('analyzing');
       const analysisResult = await analyzeIdea(idea);
       setAnalysis(analysisResult.analysis);
+
+      // Handle Clarification Step
+      if (analysisResult.analysis.needsMoreInfo && !skipClarification) {
+        setClarificationQuestions(analysisResult.analysis.clarificationQuestions || []);
+        setAppState('clarification');
+        return; // Pause the pipeline
+      }
+
       const ideaId = analysisResult.ideaId;
 
       // Step 2: Generate Audience
@@ -79,10 +94,17 @@ function App() {
 
   const restart = () => {
     setAppState('landing');
+    setOriginalIdea('');
+    setClarificationQuestions([]);
     setAnalysis(null);
     setPersonas([]);
     setSimulations([]);
     setReport(null);
+  };
+
+  const handleClarificationSubmit = (answers: string) => {
+    const combinedIdea = `${originalIdea}\n\nAdditional Context Provided by User:\n${answers}`;
+    startSimulationProcess(combinedIdea, true);
   };
 
   return (
@@ -97,7 +119,14 @@ function App() {
       </button>
 
       {appState === 'landing' && (
-        <LandingPage onSubmitIdea={startSimulationProcess} />
+        <LandingPage onSubmitIdea={(idea) => startSimulationProcess(idea, false)} />
+      )}
+      
+      {appState === 'clarification' && (
+        <ClarificationView 
+          questions={clarificationQuestions} 
+          onSubmit={handleClarificationSubmit} 
+        />
       )}
       
       {appState === 'simulation' && (
@@ -113,7 +142,15 @@ function App() {
         <ReportDashboard 
           report={report} 
           analysis={analysis}
+          personas={personas}
+          simulations={simulations}
           onRestart={restart} 
+          onPivotComplete={(result) => {
+            setAnalysis(result.analyzedIdea);
+            setPersonas(result.personas);
+            setSimulations(result.simulations);
+            setReport(result.report);
+          }}
         />
       )}
     </div>

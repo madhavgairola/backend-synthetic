@@ -7,27 +7,62 @@
     --background: #FAFAFA;
     --foreground: #111111;
   }
+  
+  html.dark {
+    --background: #050505;
+    --foreground: #FFFFFF;
+    color-scheme: dark;
+  }
 
+  html {
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  
   body {
     background-color: var(--background);
     color: var(--foreground);
     font-family: 'Outfit', system-ui, -apple-system, sans-serif;
-    margin: 0;
     display: flex;
     min-height: 100vh;
-    min-width: 100vw;
     flex-direction: column;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    
-    ::-webkit-scrollbar {
-      width: 8px;
-      background: transparent;
-    }
-    ::-webkit-scrollbar-thumb {
-      background-color: #EAEAEA;
-      border-radius: 8px;
-    }
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Global Scrollbar for Chrome/Webkit */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: rgba(15, 23, 42, 0.2); /* Darker gray for light mode */
+    border-radius: 10px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(15, 23, 42, 0.4);
+  }
+
+  /* Dark Mode Scrollbar */
+  html.dark ::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.15); /* Soft white for dark mode */
+  }
+  html.dark ::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+  }
+
+  /* Firefox Support */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(15, 23, 42, 0.2) transparent;
+  }
+  html.dark * {
+    scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
   }
 
   #root {

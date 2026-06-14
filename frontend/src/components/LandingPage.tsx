@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import React, { useState, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight, Sparkles, LayoutDashboard, Users, FileText, ChevronDown } from 'lucide-react';
 
 interface LandingPageProps {
@@ -8,11 +8,22 @@ interface LandingPageProps {
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onSubmitIdea }) => {
   const [idea, setIdea] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (idea.trim()) {
+      setIsFocused(false);
       onSubmitIdea(idea);
+    }
+  };
+
+  const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setIdea(e.target.value);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = '60px'; // Reset to min-height to calculate properly
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
     }
   };
 
@@ -21,51 +32,79 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSubmitIdea }) => {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-framer-bg dark:bg-[#050505] text-framer-text dark:text-white selection:bg-gray-200 dark:selection:bg-[#222] overflow-hidden relative transition-colors duration-500">
+    <div className="flex flex-col min-h-screen bg-framer-bg dark:bg-[#050505] text-framer-text dark:text-white selection:bg-gray-200 dark:selection:bg-[#222] relative transition-colors duration-500">
       
+      {/* Spotlight Backdrop */}
+      <AnimatePresence>
+        {isFocused && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="fixed inset-0 z-40 bg-framer-bg/40 dark:bg-[#050505]/60 backdrop-blur-sm"
+            onClick={() => setIsFocused(false)}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Soft Ambient Background Blurs */}
-      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-100 dark:bg-blue-900/30 rounded-full blur-[120px] opacity-60 pointer-events-none transition-colors duration-500" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-100 dark:bg-purple-900/30 rounded-full blur-[120px] opacity-60 pointer-events-none transition-colors duration-500" />
+      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vh] bg-blue-100 dark:bg-blue-900/30 rounded-full blur-[120px] opacity-60 transition-colors duration-500" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vh] bg-purple-100 dark:bg-purple-900/30 rounded-full blur-[120px] opacity-60 transition-colors duration-500" />
+      </div>
 
       {/* Hero Section */}
-      <div className="flex flex-col items-center justify-center min-h-screen p-6 relative z-10">
+      <div className="flex flex-col items-center justify-center min-h-screen p-6 relative">
         <motion.div 
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
           className="max-w-4xl w-full text-center space-y-8"
         >
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white dark:bg-[#111] shadow-sm border border-framer-border dark:border-[#222] text-sm font-medium text-gray-600 dark:text-gray-300 mb-4 transition-colors duration-500">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white dark:bg-[#111] shadow-sm border border-framer-border dark:border-[#222] text-sm font-medium text-gray-600 dark:text-gray-300 mb-4 transition-colors duration-500 relative">
             <Sparkles className="w-4 h-4 text-amber-400" />
             <span>Introducing AI Simulations</span>
           </div>
 
-          <h1 className="text-6xl md:text-8xl font-semibold tracking-tight text-framer-text dark:text-white leading-[1.1] transition-colors duration-500">
+          <h1 className="text-6xl md:text-8xl font-semibold tracking-tight text-framer-text dark:text-white leading-[1.1] transition-colors duration-500 relative">
             Test your idea before the world does.
           </h1>
           
-          <p className="text-xl md:text-2xl text-framer-muted dark:text-gray-400 font-light tracking-wide max-w-2xl mx-auto leading-relaxed transition-colors duration-500">
+          <p className="text-xl md:text-2xl text-framer-muted dark:text-gray-400 font-light tracking-wide max-w-2xl mx-auto leading-relaxed transition-colors duration-500 relative">
             Generate a synthetic audience to validate your startup, product, or feature concept instantly.
           </p>
 
-          <form onSubmit={handleSubmit} className="mt-16 w-full max-w-2xl mx-auto">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-white dark:bg-[#0a0a0a] border border-framer-border dark:border-[#222] rounded-[2rem] p-2 sm:p-3 shadow-framer dark:shadow-none hover:shadow-framer-hover transition-all duration-500">
+          <motion.form 
+            onSubmit={handleSubmit} 
+            className="mt-16 w-full max-w-4xl mx-auto relative z-50"
+            animate={{
+              scale: isFocused ? 1.02 : 1,
+              y: isFocused ? -20 : 0,
+            }}
+            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+          >
+            <div className={`flex flex-col items-stretch gap-3 bg-white dark:bg-[#0a0a0a] border border-framer-border dark:border-[#333] rounded-[2rem] p-3 transition-all duration-500 ${isFocused ? 'shadow-2xl ring-4 ring-blue-500/20' : 'shadow-framer dark:shadow-none hover:shadow-framer-hover'}`}>
               <textarea
+                ref={textareaRef}
                 value={idea}
-                onChange={(e) => setIdea(e.target.value)}
-                placeholder="Describe your startup, product, or feature concept..."
-                className="w-full bg-transparent text-framer-text dark:text-white placeholder-gray-400 dark:placeholder-gray-600 p-4 text-lg resize-none focus:outline-none min-h-[60px] max-h-[150px]"
-                rows={1}
+                onChange={handleInput}
+                onFocus={() => setIsFocused(true)}
+                placeholder="Describe your startup, product, or feature concept in detail..."
+                className="w-full bg-transparent text-framer-text dark:text-white placeholder-gray-400 dark:placeholder-gray-600 p-4 text-xl resize-none focus:outline-none min-h-[60px]"
+                style={{ overflowY: idea.length > 0 && textareaRef.current && textareaRef.current.scrollHeight > 200 ? 'auto' : 'hidden' }}
               />
-              <button
-                type="submit"
-                disabled={!idea.trim()}
-                className="w-full sm:w-auto px-8 py-4 rounded-full bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-black dark:hover:bg-gray-200 disabled:bg-gray-200 disabled:text-gray-400 dark:disabled:bg-[#222] dark:disabled:text-[#555] disabled:shadow-none shadow-md transition-all duration-300 flex items-center justify-center gap-2 font-medium text-lg shrink-0"
-              >
-                Simulate <ArrowRight className="w-5 h-5" />
-              </button>
+              <div className="flex justify-end pr-2 pb-2">
+                <button
+                  type="submit"
+                  disabled={!idea.trim()}
+                  className="px-8 py-4 rounded-full bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-black dark:hover:bg-gray-200 disabled:bg-gray-200 disabled:text-gray-400 dark:disabled:bg-[#222] dark:disabled:text-[#555] disabled:shadow-none shadow-md transition-all duration-300 flex items-center justify-center gap-2 font-medium text-lg shrink-0"
+                >
+                  Simulate <ArrowRight className="w-5 h-5" />
+                </button>
+              </div>
             </div>
-          </form>
+          </motion.form>
         </motion.div>
 
         {/* Scroll down indicator */}

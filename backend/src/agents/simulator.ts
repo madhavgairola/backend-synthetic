@@ -1,4 +1,4 @@
-import { geminiService } from '../services/gemini';
+import { llmService } from '../services/llm';
 import { Persona, SimulationResult } from '../types';
 import {
   PERSONA_SIMULATION_SYSTEM,
@@ -30,9 +30,10 @@ export const simulatorAgent = {
     const userPrompt = formatPersonaSimulationPrompt(ideaText, personas);
 
     try {
-      const results = await geminiService.callGeminiJSON<BatchSimulationItem[]>(
+      const results = await llmService.callLlmJSON<BatchSimulationItem[]>(
         systemInstruction,
         userPrompt,
+        'openai/gpt-4o-mini',
         PERSONA_SIMULATION_SCHEMA
       );
 

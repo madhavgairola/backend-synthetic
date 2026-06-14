@@ -1,4 +1,4 @@
-import { geminiService } from '../services/gemini';
+import { llmService } from '../services/llm';
 import { IdeaAnalysis } from '../types';
 import {
   IDEA_ANALYZER_SYSTEM,
@@ -19,24 +19,29 @@ export const analyzerAgent = {
     const userPrompt = formatIdeaAnalyzerPrompt(ideaText);
 
     try {
-      const result = await geminiService.callGeminiJSON<IdeaAnalysis>(
+      const result = await llmService.callLlmJSON<IdeaAnalysis>(
         systemInstruction,
         userPrompt,
+        'openai/gpt-4o',
         IDEA_ANALYZER_SCHEMA
       );
       
-      // Perform basic validation on schema fields
-      if (!result.industry || !result.targetAudience || !result.keyValueProposition) {
-        throw new Error('Idea Analyzer Agent returned incomplete analysis data.');
+      // Perform basic validation on schema fields, unless it explicitly needs more info
+      if (!result.needsMoreInfo) {
+        if (!result.industry || !result.targetAudience || !result.keyValueProposition) {
+          throw new Error('Idea Analyzer Agent returned incomplete analysis data.');
+        }
       }
 
       return {
-        industry: result.industry,
-        targetAudience: result.targetAudience,
+        needsMoreInfo: result.needsMoreInfo || false,
+        clarificationQuestions: result.clarificationQuestions || [],
+        industry: result.industry || 'Unknown',
+        targetAudience: result.targetAudience || 'Unknown',
         stakeholders: result.stakeholders || [],
-        businessType: result.businessType,
+        businessType: result.businessType || 'Unknown',
         competitors: result.competitors || [],
-        keyValueProposition: result.keyValueProposition
+        keyValueProposition: result.keyValueProposition || 'Unknown'
       };
     } catch (error) {
       console.error('Error in analyzerAgent.analyzeIdea:', error);

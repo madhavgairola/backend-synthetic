@@ -301,6 +301,7 @@ export const dbService = {
           least_interested_segment: insights.leastInterestedSegment,
           frequently_asked_questions: insights.frequentlyAskedQuestions,
           improvement_opportunities: insights.improvementRecommendations,
+          actionable_roadmap: insights.actionableRoadmap,
           full_report_markdown: fullReportMarkdown
         });
 
@@ -338,7 +339,8 @@ export const dbService = {
             mostInterestedSegment: data.most_interested_segment,
             leastInterestedSegment: data.least_interested_segment,
             frequentlyAskedQuestions: data.frequently_asked_questions,
-            improvementRecommendations: data.improvement_opportunities
+            improvementRecommendations: data.improvement_opportunities,
+            actionableRoadmap: data.actionable_roadmap || []
           },
           fullReportMarkdown: data.full_report_markdown,
           createdAt: new Date(data.created_at)

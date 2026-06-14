@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Persona, Simulation, IdeaAnalysis } from '../services/api';
 import { Loader2, Check, ChevronDown } from 'lucide-react';
@@ -75,7 +75,7 @@ const AnalysisPhase: React.FC<{ status: string, analysis: IdeaAnalysis | null }>
               </div>
               <div>
                 <p className={`font-medium ${status === 'generating' ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>
-                  Generating 15 distinct demographic profiles
+                  Generating 20 distinct demographic profiles
                 </p>
               </div>
             </motion.div>
@@ -83,33 +83,101 @@ const AnalysisPhase: React.FC<{ status: string, analysis: IdeaAnalysis | null }>
 
         </div>
       </div>
-      
-      {/* Footer expansion indicator (purely visual to match style) */}
-      <div className="bg-white/30 dark:bg-black/30 backdrop-blur-sm border-t border-gray-200/50 dark:border-[#333]/50 px-12 py-4 flex justify-between items-center text-sm text-gray-500">
-        <span>Reasoning process active</span>
-        <ChevronDown className="w-5 h-5" />
-      </div>
     </motion.div>
   );
 };
 
+import Matter from 'matter-js';
+
 // ==========================================
-// PHASE 2: THE CANVAS
+// PHASE 2: THE CANVAS (Physics)
 // ==========================================
 const CanvasPhase: React.FC<{ personas: Persona[], simulations: Simulation[], status: string }> = ({ personas, simulations, status }) => {
-  const [activePersonaIdx, setActivePersonaIdx] = useState<number>(-1);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const nodesRef = useRef<(HTMLDivElement | null)[]>([]);
   
-  // Only visualize a subset of personas to avoid clutter
-  const displayPersonas = personas.slice(0, 8);
+  const displayPersonas = personas.slice(0, 20);
+  
+  const THINKING_EMOJIS = ['🤔', '💭', '🧐', '🤨', '🤫', '😶', '🧠', '👀'];
+
+  // Assign a static, random thinking emoji to each persona once
+  const thinkingEmojis = React.useMemo(() => {
+    return displayPersonas.map(() => THINKING_EMOJIS[Math.floor(Math.random() * THINKING_EMOJIS.length)]);
+  }, [displayPersonas]);
+
+  // Fallback realistic emojis based on their excitement score
+  const getRealisticEmoji = (score: number, fallbackSeed: number) => {
+    if (score >= 9) return ['🤩', '❤️', '🔥', '🚀', '🤯'][fallbackSeed % 5];
+    if (score >= 7) return ['👍', '😊', '💡', '🙌', '😎'][fallbackSeed % 5];
+    if (score >= 4) return ['🤔', '😐', '🤷', '🧐', '😬'][fallbackSeed % 5];
+    return ['👎', '😡', '🥱', '🙅', '🤦'][fallbackSeed % 5];
+  };
 
   useEffect(() => {
-    if (status === 'done' || (status === 'simulating' && simulations.length > 0)) {
-      const interval = setInterval(() => {
-        setActivePersonaIdx((prev) => (prev + 1) % displayPersonas.length);
-      }, 3500);
-      return () => clearInterval(interval);
-    }
-  }, [status, displayPersonas.length, simulations.length]);
+    if (!containerRef.current) return;
+    
+    // Setup Matter.js Engine
+    const engine = Matter.Engine.create();
+    engine.gravity.y = 0;
+    engine.gravity.x = 0;
+    
+    const cw = containerRef.current.clientWidth;
+    const ch = containerRef.current.clientHeight;
+    
+    // Static walls to keep circles inside
+    const wallOptions = { isStatic: true, friction: 0, restitution: 0.8 };
+    const walls = [
+      Matter.Bodies.rectangle(cw/2, -25, cw + 50, 50, wallOptions), // top
+      Matter.Bodies.rectangle(cw/2, ch + 25, cw + 50, 50, wallOptions), // bottom
+      Matter.Bodies.rectangle(-25, ch/2, 50, ch + 50, wallOptions), // left
+      Matter.Bodies.rectangle(cw + 25, ch/2, 50, ch + 50, wallOptions) // right
+    ];
+    
+    // Persona bodies
+    const bodies = displayPersonas.map((p, i) => {
+      const x = 50 + Math.random() * (cw - 100);
+      const y = 50 + Math.random() * (ch - 100);
+      return Matter.Bodies.circle(x, y, 24, {
+        restitution: 0.8, // Bouncy
+        frictionAir: 0.02,
+        friction: 0.05,
+        render: { visible: false } // Custom DOM rendering
+      });
+    });
+    
+    Matter.World.add(engine.world, [...walls, ...bodies]);
+    
+    // Mouse constraint for dragging
+    const mouse = Matter.Mouse.create(containerRef.current);
+    const mouseConstraint = Matter.MouseConstraint.create(engine, {
+      mouse: mouse,
+      constraint: { stiffness: 0.2, render: { visible: false } }
+    });
+    Matter.World.add(engine.world, mouseConstraint);
+    
+    // Initial velocity scatter
+    bodies.forEach(b => {
+      Matter.Body.setVelocity(b, { x: (Math.random() - 0.5) * 6, y: (Math.random() - 0.5) * 6 });
+    });
+    
+    // Sync physics to React DOM
+    Matter.Events.on(engine, 'afterUpdate', () => {
+      bodies.forEach((body, i) => {
+        const node = nodesRef.current[i];
+        if (node) {
+          node.style.transform = `translate(${body.position.x}px, ${body.position.y}px)`;
+        }
+      });
+    });
+    
+    const runner = Matter.Runner.create();
+    Matter.Runner.run(runner, engine);
+    
+    return () => {
+      Matter.Runner.stop(runner);
+      Matter.Engine.clear(engine);
+    };
+  }, [displayPersonas.length]);
 
   return (
     <motion.div 
@@ -126,63 +194,53 @@ const CanvasPhase: React.FC<{ personas: Persona[], simulations: Simulation[], st
         </div>
       </div>
 
-      <div className="relative w-full h-[450px] border border-gray-200 dark:border-[#333] bg-white dark:bg-[#0a0a0a] rounded-3xl p-8 flex flex-wrap content-center justify-center gap-6 transition-colors duration-500 overflow-hidden">
-        {/* Very subtle dot grid */}
-        <div className="absolute inset-0 dark:opacity-10" style={{ backgroundImage: 'radial-gradient(#E5E7EB 1px, transparent 1px)', backgroundSize: '24px 24px', opacity: 0.5 }} />
+      <div ref={containerRef} className="relative w-full h-[650px] max-w-[95%] border border-gray-200 dark:border-[#333] bg-white dark:bg-[#0a0a0a] rounded-3xl overflow-hidden shadow-sm">
+        {/* Subtle background pattern */}
+        <div className="absolute inset-0 dark:opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(#E5E7EB 1px, transparent 1px)', backgroundSize: '24px 24px', opacity: 0.5 }} />
 
-        <AnimatePresence>
-          {displayPersonas.map((persona, idx) => {
-            const isThinking = idx === activePersonaIdx && simulations.length > 0;
-            const sim = simulations.find(s => s.personaId === persona.id);
-            const hue = (persona.name.length * 40) % 360;
+        {displayPersonas.map((persona, idx) => {
+          const sim = simulations.find(s => s?.personaId === persona?.id);
+          const hue = (persona?.name.length * 40) % 360;
+          const isDone = !!sim;
+          
+          let emoji = thinkingEmojis[idx];
+          if (isDone) {
+            emoji = sim.result?.reactionEmoji || '';
+            // If LLM didn't return an emoji or just returned standard thumbs up, use realistic fallback based on score
+            if (!emoji || emoji === '👍' || emoji.length > 2) {
+               emoji = getRealisticEmoji(sim.result?.excitementScore || 5, hue);
+            }
+          }
 
-            return (
-              <motion.div
-                key={persona.id}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: idx * 0.05, duration: 0.5 }}
-                className="relative z-10"
+          return (
+            <div
+              key={persona.id}
+              ref={el => nodesRef.current[idx] = el}
+              className="absolute top-[-24px] left-[-24px] z-10 group cursor-grab active:cursor-grabbing w-12 h-12"
+            >
+              {/* Agent Avatar */}
+              <div 
+                className={`w-full h-full rounded-full flex items-center justify-center transition-all duration-300 ease-out border-2 group-hover:shadow-[0_0_15px_rgba(59,130,246,0.5)] group-hover:border-blue-400 group-hover:z-50 ${isDone ? 'border-green-400' : 'border-white dark:border-[#111]'} shadow-sm`}
+                style={{ backgroundColor: `hsl(${hue}, 70%, 90%)` }}
               >
-                {/* Agent Avatar */}
-                <div 
-                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ease-out border-2
-                    ${isThinking ? 'border-blue-500 shadow-md scale-105' : 'border-white dark:border-[#111]'}`}
-                  style={{ backgroundColor: `hsl(${hue}, 70%, 90%)` }}
-                >
-                  <span className="text-sm font-semibold" style={{ color: `hsl(${hue}, 60%, 30%)` }}>
-                    {persona.name.charAt(0)}
-                  </span>
-                </div>
+                <span className="text-base font-semibold" style={{ color: `hsl(${hue}, 60%, 30%)` }}>
+                  {persona?.name?.charAt(0) || 'U'}
+                </span>
                 
-                {/* Elegant Chat Bubble */}
-                <AnimatePresence>
-                  {isThinking && sim && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 15, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
-                      transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                      className="absolute bottom-[calc(100%+12px)] left-1/2 -translate-x-1/2 w-64 bg-white dark:bg-[#111] border border-gray-200 dark:border-[#333] shadow-lg p-4 rounded-2xl rounded-bl-sm z-50 pointer-events-none origin-bottom-left transition-colors duration-500"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-semibold text-gray-900 dark:text-white">{persona.name}</span>
-                        <span className="text-[9px] font-medium text-gray-500 bg-gray-100 dark:bg-[#222] px-2 py-0.5 rounded-full uppercase tracking-wide">{persona.role}</span>
-                      </div>
-                      <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed font-light">"{sim.reaction}"</p>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                {/* Hover Info */}
-                <div className="absolute opacity-0 hover:opacity-100 transition-opacity duration-200 top-[calc(100%+8px)] left-1/2 -translate-x-1/2 min-w-[100px] bg-gray-900 dark:bg-white text-white dark:text-black shadow-md px-3 py-1.5 rounded-lg z-40 pointer-events-auto cursor-default text-center">
-                  <span className="font-semibold block text-xs">{persona.name}</span>
-                  <span className="block text-[9px] font-medium opacity-80 mt-0.5">{persona.role}</span>
+                {/* Emoji Badge */}
+                <div className="absolute -top-1 -right-1 bg-white dark:bg-[#1a1a1a] rounded-full p-[2px] shadow-sm border border-gray-100 dark:border-[#333] flex items-center justify-center text-sm w-6 h-6 z-20 transition-all duration-300">
+                  {emoji}
                 </div>
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
+              </div>
+              
+              {/* Hover Info */}
+              <div className="absolute opacity-0 group-hover:opacity-100 transition-opacity duration-300 translate-y-2 group-hover:translate-y-0 top-[calc(100%+8px)] left-1/2 -translate-x-1/2 w-48 bg-white/95 dark:bg-black/95 backdrop-blur-md border border-gray-100 dark:border-[#333] shadow-xl px-4 py-3 rounded-xl z-50 pointer-events-none text-center">
+                <span className="font-bold block text-sm text-gray-900 dark:text-white">{persona.name}</span>
+                <span className="block text-[10px] font-semibold tracking-wide text-gray-500 uppercase mt-1">{persona.role}</span>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </motion.div>
   );

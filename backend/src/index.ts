@@ -2,6 +2,9 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import * as dotenv from 'dotenv';
 import analysisRouter from './routes/analysis';
+import chatRouter from './routes/chat';
+import assetsRouter from './routes/assets';
+import pivotRouter from './routes/pivot';
 
 // Load environment variables
 dotenv.config();
@@ -21,7 +24,13 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
 // Mount routes directly to root / as requested, and also under /api for flexibility
 app.use('/', analysisRouter);
+app.use('/', chatRouter);
+app.use('/', assetsRouter);
+app.use('/', pivotRouter);
 app.use('/api', analysisRouter);
+app.use('/api', chatRouter);
+app.use('/api', assetsRouter);
+app.use('/api', pivotRouter);
 
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {

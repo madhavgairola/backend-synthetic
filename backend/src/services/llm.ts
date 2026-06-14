@@ -1,20 +1,24 @@
-import { GoogleGenerativeAI, Schema } from '@google/generative-ai';
+import OpenAI from 'openai';
 import * as dotenv from 'dotenv';
+import { Schema } from '@google/generative-ai'; // Keeping this type import if other files use it
 
 dotenv.config();
 
-const apiKey = process.env.GEMINI_API_KEY;
-let genAI: GoogleGenerativeAI | null = null;
+const apiKey = process.env.REQUEST_API_KEY;
+let openai: OpenAI | null = null;
 
-if (apiKey && apiKey !== 'your_gemini_api_key_here') {
+if (apiKey && apiKey !== 'your_api_key_here') {
   try {
-    genAI = new GoogleGenerativeAI(apiKey);
-    console.log('⚡ Gemini Client initialized successfully.');
+    openai = new OpenAI({
+      apiKey: apiKey,
+      baseURL: 'https://router.requesty.ai/v1',
+    });
+    console.log('⚡ Requesty (OpenAI SDK) Client initialized successfully.');
   } catch (error) {
-    console.error('⚠️ Failed to initialize Gemini client:', error);
+    console.error('⚠️ Failed to initialize Requesty client:', error);
   }
 } else {
-  console.log('ℹ️ GEMINI_API_KEY not configured. Running with high-fidelity Mock AI fallback.');
+  console.log('ℹ️ REQUEST_API_KEY not configured. Running with high-fidelity Mock AI fallback.');
 }
 
 /**
@@ -41,7 +45,7 @@ async function retryWithBackoff<T>(
       errorMessage.includes('rate limit');
 
     if (retries > 0 && isTransient) {
-      console.warn(`⚠️ Gemini API transient error (${status || 'unknown'}: ${error.message}). Retrying in ${delay}ms... (${retries} attempts remaining)`);
+      console.warn(`⚠️ API transient error (${status || 'unknown'}: ${error.message}). Retrying in ${delay}ms... (${retries} attempts remaining)`);
       await new Promise((resolve) => setTimeout(resolve, delay));
       return retryWithBackoff(fn, retries - 1, delay * 2);
     }
@@ -49,93 +53,146 @@ async function retryWithBackoff<T>(
   }
 }
 
-export const geminiService = {
+export const llmService = {
   /**
-   * Helper to make structured JSON calls to Gemini 2.5 Flash.
+   * Helper to make structured JSON calls to Requesty.
+   * Model defaults to gpt-4o-mini to keep costs incredibly low for volume tasks.
    */
-  async callGeminiJSON<T>(
+  async callLlmJSON<T>(
     systemInstruction: string,
     userPrompt: string,
-    responseSchema?: Schema
+    modelId: string = 'openai/gpt-4o-mini',
+    responseSchema?: any // We can ignore strict JSON schema for simple JSON mode, or use structured outputs if supported by Requesty
   ): Promise<T> {
-    if (!genAI) {
-      // Return high-fidelity mocked responses based on userPrompt content
+    if (!openai) {
       return this.generateMockResponse<T>(userPrompt);
     }
 
     try {
       return await retryWithBackoff(async () => {
-        // Use gemini-2.5-flash as requested by the user
-        const model = genAI!.getGenerativeModel({
-          model: 'gemini-2.5-flash',
-          systemInstruction: systemInstruction,
-        });
-
-        const generationConfig: any = {
-          temperature: 0.7,
-          topP: 0.95,
-          topK: 40,
-          maxOutputTokens: 8192,
-          responseMimeType: 'application/json',
-        };
+        // Force the system instruction to explicitly ask for JSON to satisfy OpenAI's json_object requirement
+        let finalSystemInstruction = systemInstruction.includes('JSON') 
+          ? systemInstruction 
+          : systemInstruction + '\n\nIMPORTANT: You must output ONLY valid JSON.';
 
         if (responseSchema) {
-          generationConfig.responseSchema = responseSchema;
+          if (responseSchema.type === 'array') {
+            finalSystemInstruction += '\n\nSince you must output a JSON Object, please wrap your array in an object with a single key "data" like { "data": [ ... ] }.\nFollow this JSON schema structure:\n' + JSON.stringify({ type: 'object', properties: { data: responseSchema } }, null, 2);
+          } else {
+            finalSystemInstruction += '\n\nYour JSON MUST strictly conform to the following JSON schema structure. Do not wrap the JSON in markdown code blocks, just return the raw JSON:\n' + JSON.stringify(responseSchema, null, 2);
+          }
         }
 
-        const result = await model.generateContent({
-          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-          generationConfig,
+        const response = await openai!.chat.completions.create({
+          model: modelId,
+          messages: [
+            { role: 'system', content: finalSystemInstruction },
+            { role: 'user', content: userPrompt }
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.7,
+          max_tokens: 4000,
         });
 
-        const text = result.response.text();
+        const text = response.choices[0]?.message?.content;
+        console.log('--- LLM RAW RESPONSE [' + modelId + '] ---');
+        console.log(text);
+        console.log('-------------------------------------------');
+        
         if (!text) {
-          throw new Error('Received empty response from Gemini API.');
+          throw new Error('Received empty response from API.');
         }
 
         try {
-          return JSON.parse(text) as T;
+          let parsed = JSON.parse(text);
+          
+          // OpenAI json_object mode forces the output to be an Object.
+          // If we expect an array, the model will wrap it. Let's aggressively unwrap it,
+          // BUT ONLY IF we actually expected an array in the schema!
+          if (responseSchema && responseSchema.type === 'array') {
+            if (!Array.isArray(parsed) && typeof parsed === 'object' && parsed !== null) {
+              const arrays = Object.values(parsed).filter(val => Array.isArray(val));
+              if (arrays.length > 0) {
+                parsed = arrays[0]; // grab the first array found
+              }
+            }
+          }
+          
+          return parsed as T;
         } catch (parseErr: any) {
           console.error('--- JSON PARSE ERROR DETAILS ---');
           console.error('Error message:', parseErr.message);
-          console.error('Response text length:', text.length);
           console.error('Response text end snippet:', text.substring(Math.max(0, text.length - 300)));
           throw parseErr;
         }
       });
     } catch (error: any) {
-      console.warn(`⚠️ Gemini API error encountered after retries. Falling back to high-fidelity Mock AI response. Error: ${error.message || error}`);
+      console.warn(`⚠️ API error encountered after retries. Falling back to high-fidelity Mock AI response. Error: ${error.message || error}`);
       return this.generateMockResponse<T>(userPrompt);
     }
   },
 
   /**
-   * Helper to call Gemini for standard markdown text outputs (e.g. final report markdown)
+   * Helper to call Requesty for standard markdown text outputs (e.g. final report markdown)
    */
-  async callGeminiText(
+  async callLlmText(
     systemInstruction: string,
-    userPrompt: string
+    userPrompt: string,
+    modelId: string = 'anthropic/claude-3-5-sonnet-20240620'
   ): Promise<string> {
-    if (!genAI) {
+    if (!openai) {
       return this.generateMockTextReport(userPrompt);
     }
 
     try {
       return await retryWithBackoff(async () => {
-        const model = genAI!.getGenerativeModel({
-          model: 'gemini-2.5-flash',
-          systemInstruction: systemInstruction,
+        const response = await openai!.chat.completions.create({
+          model: modelId,
+          messages: [
+            { role: 'system', content: systemInstruction },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: 0.7,
         });
 
-        const result = await model.generateContent({
-          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-        });
-
-        return result.response.text();
+        return response.choices[0]?.message?.content || '';
       });
     } catch (error: any) {
-      console.warn(`⚠️ Gemini API error encountered after retries. Falling back to high-fidelity Mock AI report. Error: ${error.message || error}`);
+      console.warn(`⚠️ API error encountered after retries. Falling back to high-fidelity Mock AI report. Error: ${error.message || error}`);
       return this.generateMockTextReport(userPrompt);
+    }
+  },
+
+  /**
+   * Helper to call Requesty for a continuous chat session
+   */
+  async callLlmChat(
+    systemInstruction: string,
+    messages: { role: 'user' | 'assistant' | 'system', content: string }[],
+    modelId: string = 'openai/gpt-4o'
+  ): Promise<string> {
+    if (!openai) {
+      return "This is a mock response. In a real environment, I would answer your question based on the report context!";
+    }
+
+    try {
+      return await retryWithBackoff(async () => {
+        const fullMessages: any[] = [
+          { role: 'system', content: systemInstruction },
+          ...messages
+        ];
+
+        const response = await openai!.chat.completions.create({
+          model: modelId,
+          messages: fullMessages,
+          temperature: 0.7,
+        });
+
+        return response.choices[0]?.message?.content || '';
+      });
+    } catch (error: any) {
+      console.warn(`⚠️ API error encountered in chat. Error: ${error.message || error}`);
+      return "Sorry, I encountered an error while trying to process your question.";
     }
   },
 
@@ -307,4 +364,3 @@ Based on the synthetic simulation, **65%** of student personas indicated a high 
 `;
   }
 };
-export { Schema };

@@ -1,4 +1,4 @@
-import { geminiService } from '../services/gemini';
+import { llmService } from '../services/llm';
 import { AggregateInsights, Persona, Simulation } from '../types';
 import {
   REPORT_GENERATOR_SYSTEM,
@@ -23,9 +23,10 @@ export const reporterAgent = {
     const userPrompt = formatReportGeneratorPrompt(ideaText, personas, simulations, insights);
 
     try {
-      const reportMarkdown = await geminiService.callGeminiText(
+      const reportMarkdown = await llmService.callLlmText(
         systemInstruction,
-        userPrompt
+        userPrompt,
+        'openai/gpt-4o'
       );
 
       if (!reportMarkdown || reportMarkdown.trim() === '') {

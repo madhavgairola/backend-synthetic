@@ -1,4 +1,4 @@
-import { geminiService } from '../services/gemini';
+import { llmService } from '../services/llm';
 import { Persona, IdeaAnalysis } from '../types';
 import {
   AUDIENCE_GENERATOR_SYSTEM,
@@ -19,8 +19,9 @@ export const generatorAgent = {
 
     const focusGroups = [
       'Primary End-Users, Consumers, and Direct Beneficiaries (highly specific to the target audience)',
-      'Technical Stakeholders, Product Managers, Engineers, Developers, and Usability Experts',
-      'Business Evaluators, Buyers, Founders, Investors, and Highly Skeptical Competitors/Critics'
+      'Secondary Beneficiaries and Indirect Users',
+      'Business Evaluators, Buyers, Founders, and Investors',
+      'Highly Skeptical Critics and Direct Competitors'
     ];
 
     console.log('Generating synthetic audience in parallel batches...');
@@ -30,9 +31,10 @@ export const generatorAgent = {
         const systemInstruction = AUDIENCE_GENERATOR_SYSTEM;
         const userPrompt = formatAudienceGeneratorPrompt(ideaText, analysis, focusGroup);
         
-        const personas = await geminiService.callGeminiJSON<Persona[]>(
+        const personas = await llmService.callLlmJSON<Persona[]>(
           systemInstruction,
           userPrompt,
+          'openai/gpt-4o-mini',
           AUDIENCE_GENERATOR_SCHEMA
         );
 

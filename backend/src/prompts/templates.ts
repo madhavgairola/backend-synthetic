@@ -7,7 +7,8 @@ import { Schema } from '@google/generative-ai';
 export const IDEA_ANALYZER_SYSTEM = `You are a startup CTO, veteran product manager, and industry analyst.
 Your task is to dissect a user's submitted idea (which could be a startup idea, feature, ad, or landing page) and extract structured metadata.
 Analyze the industry, primary target audience, secondary stakeholders, business type (B2B, B2C, SaaS, etc.), key potential competitors, and the key value proposition.
-Ensure your analysis is realistic and objective. Don't add hype.`;
+Ensure your analysis is realistic and objective. Don't add hype.
+If the idea is too vague, short, or lacks enough detail for you to determine a highly specific industry and target audience, you MUST set needsMoreInfo to true, and provide 2-3 clarificationQuestions asking the user for the specific missing context. If it's detailed enough to proceed, set needsMoreInfo to false.`;
 
 export function formatIdeaAnalyzerPrompt(ideaText: string): string {
   return `Please analyze the following idea:
@@ -17,6 +18,15 @@ export function formatIdeaAnalyzerPrompt(ideaText: string): string {
 export const IDEA_ANALYZER_SCHEMA: Schema = {
   type: 'object',
   properties: {
+    needsMoreInfo: {
+      type: 'boolean',
+      description: "Set to true if the idea is too vague to accurately judge without more details."
+    },
+    clarificationQuestions: {
+      type: 'array',
+      items: { type: 'string' },
+      description: "2-3 specific questions asking the user for missing details (only needed if needsMoreInfo is true)."
+    },
     industry: {
       type: 'string',
       description: "The primary industry sector this idea belongs to (e.g. EdTech, FinTech, Healthcare SaaS)."
@@ -44,7 +54,7 @@ export const IDEA_ANALYZER_SCHEMA: Schema = {
       description: "The primary, unique value that this product/service solves for its core audience."
     }
   },
-  required: ["industry", "targetAudience", "stakeholders", "businessType", "competitors", "keyValueProposition"]
+  required: ["needsMoreInfo", "industry", "targetAudience", "stakeholders", "businessType", "competitors", "keyValueProposition"]
 };
 
 // ==========================================
@@ -52,7 +62,8 @@ export const IDEA_ANALYZER_SCHEMA: Schema = {
 // ==========================================
 
 export const AUDIENCE_GENERATOR_SYSTEM = `You are an expert user researcher and demographic specialist.
-Given a product/startup idea, its analysis, and a target focus group, generate exactly 6 highly detailed, diverse, and realistic personas representing that group.
+Given a product/startup idea, its analysis, and a target focus group, generate exactly 5 highly detailed, diverse, and realistic personas representing that group.
+CRITICAL: Ensure personas are strictly human and realistic. Do not generate aliens, fantasy creatures, or absurd identities even if the startup idea is humorous or sci-fi themed; instead, generate realistic business people, target demographics, and consumers who would realistically evaluate such an idea.
 For each persona, generate a full profile containing:
 - A realistic name and age.
 - A current professional or personal role matching the target focus group.
@@ -76,7 +87,7 @@ Industry Analysis:
 Target Focus Group to generate:
 👉 ${demographicFocus} 👈
 
-Generate exactly 6 diverse personas belonging to this target focus group.`;
+Generate exactly 5 diverse personas belonging to this target focus group.`;
 }
 
 export const AUDIENCE_GENERATOR_SCHEMA: Schema = {
@@ -129,6 +140,7 @@ Your task is to step into the shoes of EACH persona individually and simulate ho
 For each persona, return:
 - personaId: The exact ID of the persona.
 - reaction: A first-person written statement (3-5 sentences) embodying their voice.
+- reactionEmoji: A single emoji that best represents their emotional reaction (e.g. 🤩, 😡, 🤔, 💸).
 - excitementScore: Scale of 1 to 10.
 - concerns: Specific worries about this idea.
 - objections: Reasons why they might reject or not buy/use it.
@@ -167,13 +179,14 @@ export const PERSONA_SIMULATION_SCHEMA: Schema = {
     properties: {
       personaId: { type: 'string', description: "The exact ID of the persona simulated." },
       reaction: { type: 'string', description: "A first-person reaction from this persona (3-5 sentences)." },
+      reactionEmoji: { type: 'string', description: "A single emoji that perfectly captures their reaction." },
       excitementScore: { type: 'integer', description: "1 to 10 scale of excitement." },
       concerns: { type: 'array', items: { type: 'string' }, description: "List of worries relative to the idea." },
       objections: { type: 'array', items: { type: 'string' }, description: "Reasons why this persona would not use the product." },
       likelihoodToUse: { type: 'integer', description: "1 to 10 likelihood of using the product." },
       suggestions: { type: 'array', items: { type: 'string' }, description: "Actionable suggestions for creators." }
     },
-    required: ["personaId", "reaction", "excitementScore", "concerns", "objections", "likelihoodToUse", "suggestions"]
+    required: ["personaId", "reaction", "reactionEmoji", "excitementScore", "concerns", "objections", "likelihoodToUse", "suggestions"]
   }
 };
 
@@ -191,8 +204,9 @@ Calculate:
 - Top suggestions.
 - Which segment/roles were most interested.
 - Which segment/roles were least interested.
-- Frequently Asked Questions (what questions do personas have about how it works, pricing, etc.) - provide 3-5 questions and answers.
-- High-level improvement recommendations.`;
+- Frequently Asked Questions (list 3-5 questions personas would have). Do not answer them, just list the questions.
+- High-level improvement recommendations.
+- Actionable Roadmap: A comprehensive 5-7 step action plan on how to pivot or improve the idea based on feedback.`;
 
 export function formatInsightGeneratorPrompt(ideaText: string, simulations: any[]): string {
   const simsFormatted = simulations.map((s, idx) => {
@@ -247,20 +261,18 @@ export const INSIGHT_GENERATOR_SCHEMA: Schema = {
     },
     frequentlyAskedQuestions: {
       type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          question: { type: 'string' },
-          answer: { type: 'string' }
-        },
-        required: ["question", "answer"]
-      },
-      description: "3-5 common questions personas had, with detailed answers that can clarify the product proposition."
+      items: { type: 'string' },
+      description: "3-5 common questions personas had about the product proposition."
     },
     improvementRecommendations: {
       type: 'array',
       items: { type: 'string' },
       description: "Strategic pivot/feature recommendations to double the excitement score."
+    },
+    actionableRoadmap: {
+      type: 'array',
+      items: { type: 'string' },
+      description: "A comprehensive 5-7 step actionable roadmap or plan to make the idea better based on feedback."
     }
   },
   required: [
@@ -271,7 +283,8 @@ export const INSIGHT_GENERATOR_SCHEMA: Schema = {
     "mostInterestedSegment",
     "leastInterestedSegment",
     "frequentlyAskedQuestions",
-    "improvementRecommendations"
+    "improvementRecommendations",
+    "actionableRoadmap"
   ]
 };
 
@@ -288,9 +301,10 @@ You must use the following sections exactly:
 4. Adoption Probability: Define the likelihood of conversion/adoption.
 5. Common Objections: Bulleted list of objections with context.
 6. Suggestions: Summary of constructive feedback.
-7. FAQs: Frequently Asked Questions and answers.
+7. FAQs: Frequently Asked Questions.
 8. Risk Analysis: Main product/market risks identified.
 9. Improvement Opportunities: Concrete action items to improve the idea.
+10. Actionable Roadmap: A comprehensive 5-7 step plan to execute the improvements.
 
 Make the style professional, insightful, and formatted cleanly with headers, tables, bullet points, and markdown highlights.`;
 
@@ -307,8 +321,9 @@ Aggregate Insights:
 - Least Interested: ${insights.leastInterestedSegment}
 - Top Concerns: ${insights.topConcerns.join('; ')}
 - Top Suggestions: ${insights.topSuggestions.join('; ')}
-- FAQs: ${JSON.stringify(insights.frequentlyAskedQuestions)}
+- FAQs: ${insights.frequentlyAskedQuestions.join('; ')}
 - Recommendations: ${insights.improvementRecommendations.join('; ')}
+- Roadmap: ${insights.actionableRoadmap.join('; ')}
 
 Audience Personas:
 ${personaList}

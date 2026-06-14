@@ -3,6 +3,8 @@ import axios from 'axios';
 const API_URL = 'http://localhost:5000';
 
 export interface IdeaAnalysis {
+  needsMoreInfo?: boolean;
+  clarificationQuestions?: string[];
   industry: string;
   targetAudience: string[];
   stakeholders: string[];
@@ -21,19 +23,30 @@ export interface Persona {
 
 export interface Simulation {
   personaId: string;
-  reaction: string;
-  interestScore: number;
-  objections: string[];
-  suggestions: string[];
+  result: {
+    reaction: string;
+    reactionEmoji: string;
+    interestScore: number;
+    objections: string[];
+    suggestions: string[];
+  };
 }
 
 export interface Report {
-  interestScore: number;
-  mostInterestedSegment: string;
-  commonConcerns: string[];
-  suggestedImprovements: string[];
-  faqs: { question: string; answer: string }[];
-  markdownContent: string;
+  id: string;
+  ideaId: string;
+  insights: {
+    overallInterestScore: number;
+    adoptionProbability: number;
+    topConcerns: string[];
+    topSuggestions: string[];
+    mostInterestedSegment: string;
+    leastInterestedSegment: string;
+    frequentlyAskedQuestions: string[];
+    improvementRecommendations: string[];
+    actionableRoadmap: string[];
+  };
+  fullReportMarkdown: string;
 }
 
 export const analyzeIdea = async (idea: string) => {
@@ -58,5 +71,24 @@ export const generateReport = async (ideaId: string) => {
 
 export const fullAnalysis = async (idea: string) => {
   const response = await axios.post(`${API_URL}/full-analysis`, { idea });
+  return response.data;
+};
+
+export const sendChatMessage = async (
+  ideaId: string, 
+  messages: { role: 'user'|'assistant', content: string }[], 
+  context?: { type: 'persona' | 'general', targetId?: string }
+) => {
+  const response = await axios.post(`${API_URL}/chat`, { ideaId, messages, context });
+  return response.data;
+};
+
+export const generateAsset = async (ideaId: string, targetText: string) => {
+  const response = await axios.post(`${API_URL}/generate-asset`, { ideaId, targetText });
+  return response.data;
+};
+
+export const pivotIdea = async (ideaId: string, pivotInstruction: string) => {
+  const response = await axios.post(`${API_URL}/pivot`, { ideaId, pivotInstruction });
   return response.data;
 };

@@ -1,6 +1,8 @@
 // TypeScript Types for Synthetic Audience
 
 export interface IdeaAnalysis {
+  needsMoreInfo?: boolean;
+  clarificationQuestions?: string[];
   industry: string;
   targetAudience: string;
   stakeholders: string[];
@@ -47,10 +49,6 @@ export interface Simulation {
   createdAt: Date;
 }
 
-export interface FAQ {
-  question: string;
-  answer: string;
-}
 
 export interface AggregateInsights {
   overallInterestScore: number; // 1-100
@@ -59,8 +57,9 @@ export interface AggregateInsights {
   topSuggestions: string[];
   mostInterestedSegment: string;
   leastInterestedSegment: string;
-  frequentlyAskedQuestions: FAQ[];
+  frequentlyAskedQuestions: string[];
   improvementRecommendations: string[];
+  actionableRoadmap: string[];
 }
 
 export interface Report {
